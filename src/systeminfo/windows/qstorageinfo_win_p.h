@@ -50,83 +50,47 @@
 // We mean it.
 //
 
-#ifndef QDEVICEINFO_LINUX_P_H
-#define QDEVICEINFO_LINUX_P_H
+#ifndef QSTORAGEINFO_WIN_P_H
+#define QSTORAGEINFO_WIN_P_H
 
-#include <qdeviceinfo.h>
-
-#include <QStringList>
-
-#if !defined(QT_NO_LIBSYSINFO)
-#include <sysinfo.h>
-#endif
+#include "qstorageinfo.h"
+#include "qwmihelper_win_p.h"
 
 QT_BEGIN_NAMESPACE
 
-class QTimer;
+class QSocketNotifier;
 
-#if !defined(QT_NO_OFONO)
-class QOfonoWrapper;
-#endif // QT_NO_OFONO
-
-class QDeviceInfoPrivate : public QObject
+class QStorageInfoPrivate : public QObject
 {
     Q_OBJECT
 
 public:
-    QDeviceInfoPrivate(QDeviceInfo *parent = 0);
+    QStorageInfoPrivate(QStorageInfo *parent);
+    ~QStorageInfoPrivate();
 
-    bool hasFeature(QDeviceInfo::Feature feature);
-    int imeiCount();
-    QDeviceInfo::LockTypeFlags activatedLocks();
-    QDeviceInfo::LockTypeFlags enabledLocks();
-    QDeviceInfo::ThermalState thermalState();
-    QString imei(int interface);
-    QString manufacturer();
-    QString model();
-    QString productName();
-    QString uniqueDeviceID();
-    QString version(QDeviceInfo::Version type);
+    qlonglong availableDiskSpace(const QString &drive);
+    qlonglong totalDiskSpace(const QString &drive);
+    QString uriForDrive(const QString &drive);
+    QStringList allLogicalDrives();
+    QStorageInfo::DriveType driveType(const QString &drive);
 
 Q_SIGNALS:
-    void thermalStateChanged(QDeviceInfo::ThermalState state);
+    void logicalDriveChanged(const QString &drive, bool added);
 
 protected:
     void connectNotify(const QMetaMethod &signal);
     void disconnectNotify(const QMetaMethod &signal);
 
-private Q_SLOTS:
-    void onTimeout();
-
 private:
-#if !defined(QT_SIMULATOR)
-    QDeviceInfo * const q_ptr;
-    Q_DECLARE_PUBLIC(QDeviceInfo)
-#endif
+    QStorageInfo * const q_ptr;
+    Q_DECLARE_PUBLIC(QStorageInfo);
 
-#if !defined(QT_NO_LIBSYSINFO)
-    QString getSysInfoValue(const char *component);
-#endif
-    bool watchThermalState;
-    QDeviceInfo::ThermalState currentThermalState;
-    QString manufacturerBuffer;
-    QString modelBuffer;
-    QStringList imeiBuffer;
-    QString productNameBuffer;
-    QString uniqueDeviceIDBuffer;
-    QString versionBuffer[2];
-    QTimer *timer;
+    QStringList mountEntriesList;
 
-    QDeviceInfo::ThermalState getThermalState();
-
-#if !defined(QT_NO_OFONO)
-    QOfonoWrapper *ofonoWrapper;
-#endif // QT_NO_OFONO
-#if !defined(QT_NO_LIBSYSINFO)
-    struct system_config *sc;
-#endif
+private Q_SLOTS:
+    void notificationArrived();
 };
 
 QT_END_NAMESPACE
 
-#endif // QDEVICEINFO_LINUX_P_H
+#endif // QSTORAGEINFO_WIN_P_H
