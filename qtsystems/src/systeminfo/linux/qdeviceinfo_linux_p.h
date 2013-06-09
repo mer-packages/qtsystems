@@ -39,71 +39,85 @@
 **
 ****************************************************************************/
 
-#include "qscreensaver.h"
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
 
-#if defined(Q_OS_LINUX)
-#include "linux/qscreensaver_linux_p.h"
-#elif defined(Q_OS_WIN)
-#  include "windows/qscreensaver_win_p.h"
-#elif defined(Q_OS_MAC)
-#  include "mac/qscreensaver_mac_p.h"
-#else
+#ifndef QDEVICEINFO_LINUX_P_H
+#define QDEVICEINFO_LINUX_P_H
+
+#include <qdeviceinfo.h>
+
+#include <QStringList>
+
 QT_BEGIN_NAMESPACE
-class QScreenSaverPrivate
-{
-public:
-    QScreenSaverPrivate(QScreenSaver *) {}
 
-    bool screenSaverEnabled() { return false; }
-    void setScreenSaverEnabled(bool) {}
-};
-QT_END_NAMESPACE
+class QTimer;
+
+#if !defined(QT_NO_OFONO)
+class QOfonoWrapper;
+#endif // QT_NO_OFONO
+
+class QDeviceInfoPrivate : public QObject
+{
+    Q_OBJECT
+
+public:
+    QDeviceInfoPrivate(QDeviceInfo *parent = 0);
+
+    bool hasFeature(QDeviceInfo::Feature feature);
+    int imeiCount();
+    QDeviceInfo::LockTypeFlags activatedLocks();
+    QDeviceInfo::LockTypeFlags enabledLocks();
+    QDeviceInfo::ThermalState thermalState();
+    QString imei(int interface);
+    QString manufacturer();
+    QString model();
+    QString productName();
+    QString uniqueDeviceID();
+    QString version(QDeviceInfo::Version type);
+
+Q_SIGNALS:
+    void thermalStateChanged(QDeviceInfo::ThermalState state);
+
+protected:
+    void connectNotify(const QMetaMethod &signal);
+    void disconnectNotify(const QMetaMethod &signal);
+
+private Q_SLOTS:
+    void onTimeout();
+
+private:
+#if !defined(QT_SIMULATOR)
+    QDeviceInfo * const q_ptr;
+    Q_DECLARE_PUBLIC(QDeviceInfo)
 #endif
 
-QT_BEGIN_NAMESPACE
+    bool watchThermalState;
+    QDeviceInfo::ThermalState currentThermalState;
+    QString manufacturerBuffer;
+    QString modelBuffer;
+    QStringList imeiBuffer;
+    QString productNameBuffer;
+    QString uniqueDeviceIDBuffer;
+    QString versionBuffer[2];
+    QTimer *timer;
 
-/*!
-    \class QScreenSaver
-    \inmodule QtSystemInfo
-    \brief The QScreenSaver class provides various information about the screen saver.
+    QDeviceInfo::ThermalState getThermalState();
 
-    \ingroup systeminfo
-*/
+#if !defined(QT_NO_OFONO)
+    QOfonoWrapper *ofonoWrapper;
+#endif // QT_NO_OFONO
 
-/*!
-    Constructs a QScreenSaver object with the given \a parent.
-*/
-QScreenSaver::QScreenSaver(QObject *parent)
-    : QObject(parent)
-    , d_ptr(new QScreenSaverPrivate(this))
-{
-}
-
-/*!
-    Destroys the object
-*/
-QScreenSaver::~QScreenSaver()
-{
-    delete d_ptr;
-}
-
-/*!
-    \property QScreenSaver::screenSaverEnabled
-    \brief The state of the screen saver.
-
-    Returns if the screen saver is enabled.
-*/
-bool QScreenSaver::screenSaverEnabled() const
-{
-    return d_ptr->screenSaverEnabled();
-}
-
-/*!
-    Sets the screen saver to be \a enabled.
-*/
-void QScreenSaver::setScreenSaverEnabled(bool enabled)
-{
-    d_ptr->setScreenSaverEnabled(enabled);
-}
+};
 
 QT_END_NAMESPACE
+
+#endif // QDEVICEINFO_LINUX_P_H
