@@ -143,6 +143,7 @@ This package contains the PublishSuvbscribe import for QtDeclarative
 
 %build
 export QTDIR=/usr/share/qt5
+touch .git
 qmake -qt=5
 make %{?_smp_flags}
 
