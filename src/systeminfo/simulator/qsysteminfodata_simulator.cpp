@@ -54,11 +54,9 @@ void qt_registerSystemInfoTypes()
     qRegisterMetaTypeStreamOperators<QNetworkInfoData::BluetoothInfo>("QNetworkInfoData::BluetoothInfo");
     qRegisterMetaTypeStreamOperators<QDeviceInfoData>("QDeviceInfoData");
     qRegisterMetaTypeStreamOperators<QBatteryInfoData>("QBatteryInfoData");
-    qRegisterMetaTypeStreamOperators<QDisplayInfoData>("QDisplayInfoData");
     qRegisterMetaTypeStreamOperators<QStorageInfoData>("QStorageInfoData");
     qRegisterMetaTypeStreamOperators<QStorageInfoData::DriveInfo>("QStorageInfoData::DriveInfo");
     qRegisterMetaTypeStreamOperators<QScreenSaverData>("QScreenSaverData");
-    qRegisterMetaTypeStreamOperators<QDeviceProfileData>("QDeviceProfileData");
 }
 
 QDataStream &operator<<(QDataStream &out, const QNetworkInfoData::BasicNetworkInfo &s)
@@ -260,28 +258,6 @@ QDataStream &operator>>(QDataStream &in, QBatteryInfoData &s)
     return in;
 }
 
-QDataStream &operator<<(QDataStream &out, const QDisplayInfoData &s)
-{
-    out << static_cast<qint32>(s.brightness) << static_cast<qint32>(s.contrast);
-    out << static_cast<qint32>(s.backlightStatus);
-
-    return out;
-}
-
-QDataStream &operator>>(QDataStream &in, QDisplayInfoData &s)
-{
-    qint32 brightness, contrast;
-    in >> brightness >> contrast;
-
-    s.brightness = brightness;
-    s.contrast = contrast;
-    qint32 backlightStatus;
-    in >> backlightStatus;
-    s.backlightStatus = static_cast<QDisplayInfo::BacklightState>(backlightStatus);
-
-    return in;
-}
-
 QDataStream &operator<<(QDataStream &out, const QStorageInfoData &s)
 {
     out << s.drives;
@@ -323,28 +299,6 @@ QDataStream &operator<<(QDataStream &out, const QScreenSaverData &s)
 QDataStream &operator>>(QDataStream &in, QScreenSaverData &s)
 {
     in >> s.screenSaverEnabled;
-    return in;
-}
-
-QDataStream &operator<<(QDataStream &out, const QDeviceProfileData &s)
-{
-    out << static_cast<qint32>(s.messageRingtoneVolume)
-        << static_cast<qint32>(s.voiceRingtoneVolume)
-        << static_cast<qint32>(s.profileType);
-    out << s.isVibrationActivated;
-
-    return out;
-}
-
-QDataStream &operator>>(QDataStream &in, QDeviceProfileData &s)
-{
-    qint32 messageRingtoneVolume, voiceRingtoneVolume, profileType;
-    in >> messageRingtoneVolume >> voiceRingtoneVolume >> profileType;
-    s.messageRingtoneVolume = messageRingtoneVolume;
-    s.voiceRingtoneVolume = voiceRingtoneVolume;
-    s.profileType = static_cast<QDeviceProfile::ProfileType>(profileType);
-    in >> s.isVibrationActivated;
-
     return in;
 }
 

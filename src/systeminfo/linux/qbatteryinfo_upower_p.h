@@ -50,29 +50,71 @@
 // We mean it.
 //
 
-#ifndef QDISPLAYINFO_LINUX_P_H
-#define QDISPLAYINFO_LINUX_P_H
+#ifndef QBATTERYINFO_UPOWER_P_H
+#define QBATTERYINFO_UPOWER_P_H
 
-#include <qdisplayinfo.h>
+#include <qbatteryinfo.h>
+
+#include <QtCore/qmap.h>
+#include <QtCore/QVariantMap>
+#include <QtCore/QMap>
+#include <QtDBus/QDBusServiceWatcher>
 
 QT_BEGIN_NAMESPACE
 
-class QDisplayInfoPrivate : public QObject
+class QBatteryInfoPrivate : public QObject
 {
     Q_OBJECT
 
 public:
-    QDisplayInfoPrivate(QDisplayInfo *parent);
+    QBatteryInfoPrivate(QBatteryInfo *parent);
+    ~QBatteryInfoPrivate();
 
-    int brightness(int screen);
-    int contrast(int screen);
-    QDisplayInfo::BacklightState backlightState(int screen);
+    int batteryCount();
+    int currentFlow(int battery);
+    int maximumCapacity(int battery);
+    int remainingCapacity(int battery);
+    int remainingChargingTime(int battery);
+    int voltage(int battery);
+    QBatteryInfo::ChargerType chargerType();
+    QBatteryInfo::ChargingState chargingState(int battery);
+    QBatteryInfo::EnergyUnit energyUnit();
+    QBatteryInfo::BatteryStatus batteryStatus(int battery);
+
+Q_SIGNALS:
+    void batteryCountChanged(int count);
+    void chargerTypeChanged(QBatteryInfo::ChargerType type);
+    void chargingStateChanged(int battery, QBatteryInfo::ChargingState state);
+    void currentFlowChanged(int battery, int flow);
+    void remainingCapacityChanged(int battery, int capacity);
+    void remainingChargingTimeChanged(int battery, int seconds);
+    void voltageChanged(int battery, int voltage);
+    void batteryStatusChanged(int battery, QBatteryInfo::BatteryStatus);
+
+protected:
+    QMap <int,QVariantMap> batteryMap;
+    QBatteryInfo::ChargerType cType;
+    QBatteryInfo::ChargingState cState;
+private Q_SLOTS:
+    void upowerDeviceChanged();
+    void upowerChanged();
+    void uPowerBatteryPropertyChanged(const QString & prop, const QVariant &v);
+    void getBatteryStats();
+    void deviceAdded(const QString &path);
+    void deviceRemoved(const QString &path);
+    void connectToUpower();
+    void disconnectFromUpower();
 
 private:
-    QDisplayInfo * const q_ptr;
-    Q_DECLARE_PUBLIC(QDisplayInfo)
+    QBatteryInfo * const q_ptr;
+    Q_DECLARE_PUBLIC(QBatteryInfo)
+    QDBusServiceWatcher *watcher;
+
+    QBatteryInfo::ChargingState getCurrentChargingState(int);
+    QBatteryInfo::ChargerType getChargerType(const QString &path);
+
 };
 
 QT_END_NAMESPACE
 
-#endif // QDISPLAYINFO_LINUX_P_H
+#endif // QBATTERYINFO_UPOWER_P_H
