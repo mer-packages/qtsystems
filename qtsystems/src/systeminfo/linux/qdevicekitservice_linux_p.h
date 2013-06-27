@@ -39,6 +39,9 @@
 **
 ****************************************************************************/
 
+#ifndef QDEVICEKITSERVICE_H
+#define QDEVICEKITSERVICE_H
+
 //
 //  W A R N I N G
 //  -------------
@@ -50,50 +53,83 @@
 // We mean it.
 //
 
-#ifndef QDECLARATIVEDEVICEPROFILE_P_H
-#define QDECLARATIVEDEVICEPROFILE_P_H
-
-#include <qdeviceprofile.h>
+#include <QtDBus/QtDBus>
 
 QT_BEGIN_NAMESPACE
 
-class QDeclarativeDeviceProfile : public QObject
+
+class QUPowerInterface : public QDBusAbstractInterface
 {
     Q_OBJECT
 
-    Q_ENUMS(ProfileType)
-    Q_PROPERTY(bool isVibrationActivated READ isVibrationActivated NOTIFY vibrationActivatedChanged)
-    Q_PROPERTY(int messageRingtoneVolume READ messageRingtoneVolume NOTIFY messageRingtoneVolumeChanged)
-    Q_PROPERTY(int voiceRingtoneVolume READ voiceRingtoneVolume NOTIFY voiceRingtoneVolumeChanged)
-    Q_PROPERTY(ProfileType currentProfileType READ currentProfileType NOTIFY currentProfileTypeChanged)
-
 public:
-    enum ProfileType {
-        UnknownProfile = QDeviceProfile::UnknownProfile,
-        SilentProfile = QDeviceProfile::SilentProfile,
-        NormalProfile = QDeviceProfile::NormalProfile,
-        VibrationProfile = QDeviceProfile::VibrationProfile,
-        BeepProfile = QDeviceProfile::BeepProfile
-    };
+    QUPowerInterface(QObject *parent = 0);
+    ~QUPowerInterface();
 
-    QDeclarativeDeviceProfile(QObject *parent = 0);
-    virtual ~QDeclarativeDeviceProfile();
+    bool onBattery();
 
-    bool isVibrationActivated() const;
-    int messageRingtoneVolume() const;
-    int voiceRingtoneVolume() const;
-    ProfileType currentProfileType() const;
+    QList<QDBusObjectPath> enumerateDevices();
 
 Q_SIGNALS:
-    void vibrationActivatedChanged();
-    void messageRingtoneVolumeChanged();
-    void voiceRingtoneVolumeChanged();
-    void currentProfileTypeChanged();
+    void changed();
+    void deviceAdded(const QString &path);
+    void deviceRemoved(const QString &path);
+
+protected:
+    void connectNotify(const QMetaMethod &signal);
+    void disconnectNotify(const QMetaMethod &signal);
 
 private:
-    QDeviceProfile *deviceProfile;
+    QVariant getProperty(const QString &property);
+
+private Q_SLOTS:
+    void onDeviceAdded(const QDBusObjectPath &path);
+    void onDeviceRemoved(const QDBusObjectPath &path);
 };
+
+class QUPowerDeviceInterface : public  QDBusAbstractInterface
+{
+    Q_OBJECT
+public:
+    QUPowerDeviceInterface(const QString &dbusPathName,QObject *parent = 0);
+    ~QUPowerDeviceInterface();
+
+
+    bool isPowerSupply();
+    bool isOnline();
+    double currentEnergy();
+    double energyWhenFull();
+    double energyDischargeRate();
+    double percentLeft();
+    double voltage();
+    quint16 state();
+    quint16 type();
+    qint64 timeToFull();
+    QString nativePath();
+
+    QVariantMap getProperties();
+
+Q_SIGNALS:
+    void changed();
+    void propertyChanged(QString,QVariant);
+//    void getPropertiesFinished(const QVariantMap &properties);
+
+protected:
+    void connectNotify(const QMetaMethod &signal);
+    void disconnectNotify(const QMetaMethod &signal);
+
+private:
+    QVariant getProperty(const QString &);
+    QDBusInterface *propertiesInterface;
+    QVariantMap pMap;
+
+private Q_SLOTS:
+    void propChanged();
+    //void propertiesFinished(QDBusPendingCallWatcher *watch);
+
+};
+
 
 QT_END_NAMESPACE
 
-#endif // QDECLARATIVEDEVICEPROFILE_P_H
+#endif // QDEVICEKITSERVICE_H
