@@ -157,6 +157,13 @@ rm -f %{buildroot}/%{_libdir}/*.la
 # We don't need qt5/Qt/
 rm -rf %{buildroot}/%{_includedir}/qt5/Qt
 
+# Fix wrong path in pkgconfig files
+find %{buildroot}%{_libdir}/pkgconfig -type f -name '*.pc' \
+-exec perl -pi -e "s, -L%{_builddir}/?\S+,,g" {} \;
+# Fix wrong path in prl files
+find %{buildroot}%{_libdir} -type f -name '*.prl' \
+-exec sed -i -e "/^QMAKE_PRL_BUILD_DIR/d;s/\(QMAKE_PRL_LIBS =\).*/\1/" {} \;
+
 
 %fdupes %{buildroot}/%{_includedir}
 
