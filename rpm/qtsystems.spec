@@ -19,6 +19,7 @@ BuildRequires:  qt5-qtdeclarative-qtquick-devel
 BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  pkgconfig(libudev)
+BuildRequires:  pkgconfig(bluez)
 
 %description
 Qt is a cross-platform application and UI framework. Using Qt, you can
