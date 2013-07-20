@@ -1,6 +1,6 @@
 Name:       qt5-qtsystems
 Summary:    Qt System modules
-Version:    0.0~git682.701442a
+Version:    0.0git682.701442a
 Release:    1%{?dist}
 Group:      System/Libraries
 License:    LGPLv2.1 with exception or GPLv3
