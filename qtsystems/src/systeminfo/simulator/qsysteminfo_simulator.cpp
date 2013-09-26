@@ -298,6 +298,16 @@ QString QDeviceInfoSimulator::version(QDeviceInfo::Version type)
     return QString();
 }
 
+QString QDeviceInfoSimulator::operatingSystemName()
+{
+    return QString();
+}
+
+QString QDeviceInfoSimulator::boardName()
+{
+    return QString();
+}
+
 void QDeviceInfoSimulator::connectNotify(const QMetaMethod &signal)
 {
     static const QMetaMethod activatedLocksChangedSignal = QMetaMethod::fromSignal(&QDeviceInfoSimulator::activatedLocksChanged);
@@ -336,6 +346,11 @@ void QDeviceInfoSimulator::disconnectNotify(const QMetaMethod &signal)
         QMetaMethod sourceSignal = proxyToSourceSignal(signal, deviceInfoSimulatorBackend);
         disconnect(deviceInfoSimulatorBackend, sourceSignal, this, signal);
     }
+}
+
+bool QDeviceInfoSimulator::currentBluetoothPowerState()
+{
+    return false;
 }
 
 // QNetworkInfoSimulator
