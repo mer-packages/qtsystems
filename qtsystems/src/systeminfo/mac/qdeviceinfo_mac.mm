@@ -45,6 +45,7 @@
 #include <QSettings>
 #include <QCryptographicHash>
 #include <QtCore/private/qcore_mac_p.h>
+#include <QSysInfo>
 
 #include <CoreLocation/CLLocation.h>
 #include <CoreLocation/CLLocationManager.h>
@@ -61,11 +62,11 @@
 #include <IOKit/pwr_mgt/IOPM.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 
-#include <IOKit/IOKitLib.h>
 #include <CoreFoundation/CFDictionary.h>
 
 #include <sys/types.h>
 #include <sys/sysctl.h>
+#include <QMetaType>
 
 bool hasIOServiceMatching(const QString &classstr)
 {
@@ -79,14 +80,19 @@ bool hasIOServiceMatching(const QString &classstr)
     [pool drain];
     return false;
 }
-
-
 QT_BEGIN_NAMESPACE
 
 QDeviceInfoPrivate::QDeviceInfoPrivate(QDeviceInfo *parent)
     : QObject(parent)
     , q_ptr(parent)
+    ,btThread(0)
 {
+}
+
+QDeviceInfoPrivate::~QDeviceInfoPrivate()
+{
+    if (btThread->isRunning())
+        btThread->stop();
 }
 
 bool QDeviceInfoPrivate::hasFeature(QDeviceInfo::Feature feature)
@@ -341,7 +347,11 @@ QString QDeviceInfoPrivate::productName()
       }
       if (model.count() > 3)
           model = model.left(model.count() - 3);
-      return  model;
+      bool ok;
+      model.right(1).toInt(&ok);
+      if (ok)
+          model.chop(1);
+      return model;
 }
 
 QString QDeviceInfoPrivate::uniqueDeviceID()
@@ -388,4 +398,187 @@ QString QDeviceInfoPrivate::version(QDeviceInfo::Version type)
     return QString();
 }
 
-    QT_END_NAMESPACE
+QString QDeviceInfoPrivate::operatingSystemName()
+{
+    const QString ver = version(QDeviceInfo::Os);
+
+    if (ver.left(4) == QStringLiteral("10.6"))
+        return QStringLiteral("Snow Leopard");
+    if (ver.left(4) == QStringLiteral("10.7"))
+        return QStringLiteral("Lion");
+    if (ver.left(4) == QStringLiteral("10.8"))
+        return QStringLiteral("Mountain Lion");
+    if (ver.left(4) == QStringLiteral("10.9"))
+        return QStringLiteral("Mavericks");
+    return ver;
+}
+
+QString QDeviceInfoPrivate::boardName()
+{
+    // I suspect boardname and product are the same for macs.
+    return model();
+}
+
+static bool isBtPowerOn()
+{
+    CFMutableDictionaryRef matching = NULL;
+    CFMutableDictionaryRef btDictionary = NULL;
+    io_registry_entry_t entry = 0;
+    matching = IOServiceMatching("IOBluetoothHCIController");
+    entry = IOServiceGetMatchingService(kIOMasterPortDefault,matching);
+    IORegistryEntryCreateCFProperties(entry, &btDictionary,NULL,0);
+    bool powerOn = false;
+
+    if ([[(NSDictionary*)btDictionary objectForKey:@"HCIControllerPowerIsOn"] boolValue]) {
+        powerOn = true;
+    }
+    CFRelease(btDictionary);
+    return powerOn;
+}
+
+bool QDeviceInfoPrivate::currentBluetoothPowerState()
+{
+    if (isBtPowerOn())
+        return true;
+    return false;
+}
+
+void QDeviceInfoPrivate::connectNotify(const QMetaMethod &signal)
+{
+    static const QMetaMethod bluetoothStateChanged = QMetaMethod::fromSignal(&QDeviceInfoPrivate::bluetoothStateChanged);
+    if (signal == bluetoothStateChanged) {
+        if (!btThread) {
+            btThread = new QBluetoothListenerThread();
+            btThreadOk = true;
+            connect(btThread,SIGNAL(bluetoothPower(bool)), this, SIGNAL(bluetoothStateChanged(bool)),Qt::UniqueConnection);
+        }
+        btThread->start();
+    }
+}
+
+void QDeviceInfoPrivate::disconnectNotify(const QMetaMethod &signal)
+{
+    static const QMetaMethod bluetoothStateChanged = QMetaMethod::fromSignal(&QDeviceInfoPrivate::bluetoothStateChanged);
+    if (signal == bluetoothStateChanged) {
+        btThread->stop();
+   }
+}
+
+void btPowerStateChange(void *ref, io_service_t /*service*/, natural_t messageType, void */*info*/)
+{
+    QBluetoothListenerThread * thread = reinterpret_cast< QBluetoothListenerThread *>(ref);
+    switch (messageType) {
+    case 3758227457:
+    case kIOMessageDeviceWillPowerOff:
+    {
+        thread->emitBtPower(false);
+    }
+        break;
+    case 3758227458:
+    case kIOMessageDeviceHasPoweredOn:
+    {
+     thread->emitBtPower(true);
+    }
+        break;
+    }
+}
+
+QBluetoothListenerThread::QBluetoothListenerThread(QObject *parent)
+    :QThread(parent)
+{
+    mutex.lock();
+    keepRunning = true;
+    mutex.unlock();
+}
+
+QBluetoothListenerThread::~QBluetoothListenerThread()
+{
+}
+
+void QBluetoothListenerThread::stop()
+{
+    mutex.lock();
+    keepRunning = false;
+    mutex.unlock();
+    wait();
+}
+
+void QBluetoothListenerThread::run()
+{
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
+    io_object_t notifyObject;
+    io_service_t bluetoothservice;
+
+    io_iterator_t ioIterator;
+    mach_port_t masterPort;
+    CFMutableDictionaryRef serviceMatchDict;
+
+    if (0 != IOMasterPort(MACH_PORT_NULL, &masterPort)) {
+        qDebug() << "IOMasterPort failed";
+    }
+
+    serviceMatchDict = IOServiceMatching("IOBluetoothHCIController");
+    if (NULL == serviceMatchDict) {
+        qDebug() << "IOServiceMatching failed";
+    }
+
+    if (0 != IOServiceGetMatchingServices(masterPort, serviceMatchDict, &ioIterator)) {
+        qDebug() << "IOServiceGetMatchingServices failed";
+    }
+
+    IOReturn ret;
+
+    bluetoothservice = IOIteratorNext(ioIterator);
+    if (0 == bluetoothservice) {
+        IOObjectRelease(ioIterator);
+        qDebug() << "IOIteratorNext failed";
+    }
+    IOObjectRelease(ioIterator);
+
+    port = IONotificationPortCreate(masterPort);
+    if (0 == port) {
+        qDebug() << "IONotificationPortCreate failed";
+    }
+
+    ret = IOServiceAddInterestNotification(port, bluetoothservice,
+                                           kIOGeneralInterest, btPowerStateChange,
+                                           this, &notifyObject);
+    if (ret != kIOReturnSuccess) {
+        qDebug() << "IOServiceAddInterestNotification failed";
+        return;
+    }
+
+    rl = CFRunLoopGetCurrent();
+    rls = IONotificationPortGetRunLoopSource(port);
+
+    CFRunLoopAddSource(rl,
+                       rls,
+                       kCFRunLoopDefaultMode);
+    SInt32 result;
+    while (keepRunning &&
+           (result = CFRunLoopRunInMode(kCFRunLoopDefaultMode ,1, NO))) {
+    }
+
+    CFRunLoopStop(rl);
+
+    IOObjectRelease(bluetoothservice);
+    CFRunLoopRemoveSource(rl,
+                          rls,
+                          kCFRunLoopDefaultMode);
+    IONotificationPortDestroy(port);
+    [pool release];
+}
+
+void QBluetoothListenerThread::setupConnectNotify()
+{
+    //btConnListener = [[QtBtConnectListener alloc] init];
+}
+
+void QBluetoothListenerThread::emitBtPower(bool b)
+{
+    Q_EMIT bluetoothPower(b);
+}
+
+
+QT_END_NAMESPACE
