@@ -61,6 +61,15 @@
 #include <sys/stat.h>
 #include <QUuid>
 
+#if !defined(QT_NO_DBUS)
+#include <QtDBus/QDBusInterface>
+#include <QtDBus/QDBusReply>
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusAbstractInterface>
+#include <QtDBus/QDBusError>
+#include <QtDBus/QDBusMessage>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 QDeviceInfoPrivate::QDeviceInfoPrivate(QDeviceInfo *parent)
@@ -72,9 +81,13 @@ QDeviceInfoPrivate::QDeviceInfoPrivate(QDeviceInfo *parent)
     , imeiBuffer(QStringList())
     , uniqueDeviceIDBuffer(QString())
     , timer(0)
-    #if !defined(QT_NO_OFONO)
+    , boardNameString(QString())
+    , osName(QString())
+#if !defined(QT_NO_OFONO)
         , ofonoWrapper(0)
-    #endif // QT_NO_OFONO
+#endif // QT_NO_OFONO
+    ,connectedBtPower(0)
+    ,btPowered(0)
 {
 }
 
@@ -286,7 +299,9 @@ QString QDeviceInfoPrivate::manufacturer()
             }
         }
     }
-
+    if (manufacturerBuffer.isEmpty()) {
+        manufacturerBuffer = findInRelease(QStringLiteral("BUILD"));
+    }
     return manufacturerBuffer;
 }
 
@@ -325,20 +340,9 @@ QString QDeviceInfoPrivate::model()
 QString QDeviceInfoPrivate::productName()
 {
     if (productNameBuffer.isEmpty()) {
-        QFile release(QStringLiteral("/etc/os-release"));
-        if (release.open(QIODevice::ReadOnly))  {
-            QTextStream stream(&release);
-            QString line;
-            do {
-                line = stream.readLine();
-                if (line.startsWith(QStringLiteral("PRETTY_NAME"))) {
-                    productNameBuffer = line.split(QStringLiteral("=")).at(1).simplified().remove("\"");
-                    break;
-                }
-            } while (!line.isNull());
-            release.close();
-        }
+        productNameBuffer = findInRelease(QStringLiteral("PRETTY_NAME")).remove(QStringLiteral("\""));
     }
+
     if (productNameBuffer.isEmpty()) {
         QProcess lsbRelease;
         lsbRelease.start(QStringLiteral("/usr/bin/lsb_release"),
@@ -405,25 +409,9 @@ QString QDeviceInfoPrivate::version(QDeviceInfo::Version type)
     case QDeviceInfo::Os:
 
         if (versionBuffer[0].isEmpty()) {
-            QStringList releaseFies = QDir(QStringLiteral("/etc/")).entryList(QStringList() << QStringLiteral("*-release"));
-            foreach (const QString &file, releaseFies) {
-                if (!versionBuffer[0].isEmpty())
-                    continue;
-                QFile release(QStringLiteral("/etc/") + file);
-                if (release.open(QIODevice::ReadOnly))  {
-                    QTextStream stream(&release);
-                    QString line;
-                    do {
-                        line = stream.readLine();
-                        if (line.left(8) == QStringLiteral("VERSION=")) {
-                          versionBuffer[0] = line.split(QStringLiteral("=")).at(1).simplified();
-                          break;
-                        }
-                    } while (!line.isNull());
-                    release.close();
-                }
-            }
+            versionBuffer[0] = findInRelease(QStringLiteral("VERSION_ID"));
         }
+
         if (versionBuffer[0].isEmpty() && QFile::exists(QStringLiteral("/usr/bin/lsb_release"))) {
             QProcess lsbRelease;
             lsbRelease.start(QStringLiteral("/usr/bin/lsb_release"),
@@ -450,6 +438,127 @@ QString QDeviceInfoPrivate::version(QDeviceInfo::Version type)
     return QString();
 }
 
+QString QDeviceInfoPrivate::operatingSystemName()
+{
+    if (osName.isEmpty()) {
+        osName = findInRelease(QStringLiteral("NAME="));
+    }
+
+    return osName;
+}
+
+QString QDeviceInfoPrivate::boardName()
+{
+    if (boardNameString.isEmpty()) {
+        QFile boardfile(QStringLiteral("/etc/boardname"));
+        if (boardfile.open(QIODevice::ReadOnly))
+            boardNameString = QString::fromLocal8Bit(boardfile.readAll().simplified().data());
+    }
+
+    if (boardNameString.isEmpty()) {
+        // for dmi enabled kernels
+        QFile file(QStringLiteral("/sys/devices/virtual/dmi/id/board_name"));
+        if (file.open(QIODevice::ReadOnly))
+            boardNameString = QString::fromLocal8Bit(file.readAll().simplified().data());
+    }
+    return boardNameString;
+}
+
+QString QDeviceInfoPrivate::findInRelease(const QString &searchTerm)
+{
+    QString result;
+    QStringList releaseFies = QDir(QStringLiteral("/etc/")).entryList(QStringList() << QStringLiteral("*-release"));
+    foreach (const QString &file, releaseFies) {
+        if (!result.isEmpty())
+            continue;
+        QFile release(QStringLiteral("/etc/") + file);
+        if (release.open(QIODevice::ReadOnly))  {
+            QTextStream stream(&release);
+            QString line;
+            do {
+                line = stream.readLine();
+                if (line.left(searchTerm.size()) == searchTerm) {
+                  result = line.split(QStringLiteral("=")).at(1).simplified();
+                  break;
+                }
+            } while (!line.isNull());
+            release.close();
+        }
+    }
+    return result;
+}
+
+#if !defined(QT_NO_DBUS)
+void QDeviceInfoPrivate::bluezPropertyChanged(const QString &str, QDBusVariant v)
+{
+
+    if (str == QStringLiteral("Powered")) {
+        if (btPowered != v.variant().toBool()) {
+            btPowered = !btPowered;
+            Q_EMIT bluetoothStateChanged(btPowered);
+        }
+    } else if (str == QStringLiteral("Adapters")) {
+        bool oldPoweredState = btPowered;
+        if (oldPoweredState != currentBluetoothPowerState())
+            Q_EMIT bluetoothStateChanged(btPowered);
+    }
+}
+
+void QDeviceInfoPrivate::connectBtPowered()
+{
+    if (connectedBtPower) {
+        QDBusInterface *connectionInterface;
+        connectionInterface = new QDBusInterface(QStringLiteral("org.bluez"), QStringLiteral("/"),
+                                                 QStringLiteral("org.bluez.Manager"),
+                                                 QDBusConnection::systemBus(), this);
+        if (connectionInterface->isValid()) {
+            QDBusReply <QDBusObjectPath> reply = connectionInterface->call(QStringLiteral("DefaultAdapter"));
+            if (reply.isValid() && !reply.value().path().isEmpty()) {
+                if (!QDBusConnection::systemBus().connect(QStringLiteral("org.bluez"), reply.value().path(),
+                                                          QStringLiteral("org.bluez.Adapter"),
+                                                          QStringLiteral("PropertyChanged"),
+                                                          this,
+                                                          SLOT(bluezPropertyChanged(QString,QDBusVariant)))) {
+                }
+            }
+        }
+        connectedBtPower = true;
+    }
+}
+#endif
+
+bool QDeviceInfoPrivate::currentBluetoothPowerState()
+{
+    bool powered = false;
+#ifndef QT_NO_DBUS
+    QDBusInterface *connectionInterface = new QDBusInterface(QStringLiteral("org.bluez"),
+                                                             QStringLiteral("/"),
+                                                             QStringLiteral("org.bluez.Manager"),
+                                                             QDBusConnection::systemBus(), this);
+    if (connectionInterface->isValid()) {
+        QDBusReply<QDBusObjectPath> reply = connectionInterface->call(QStringLiteral("DefaultAdapter"));
+        if (reply.isValid() && !reply.value().path().isEmpty()) {
+            QDBusInterface *adapterInterface = new QDBusInterface(QStringLiteral("org.bluez"),
+                                                                  reply.value().path(),
+                                                                  QStringLiteral("org.bluez.Adapter"),
+                                                                  QDBusConnection::systemBus(), this);
+            if (adapterInterface->isValid()) {
+                QDBusReply<QVariantMap> reply =  adapterInterface->call(QStringLiteral("GetProperties"));
+                QVariantMap map = reply.value();
+                QString property = QStringLiteral("Powered");
+                if (map.contains(property))
+                    powered =  map.value(property).toBool();
+            } else {
+                powered = false;
+            }
+        } else {
+            powered = false;
+        }
+    }
+#endif
+    return btPowered = powered;
+}
+
 extern QMetaMethod proxyToSourceSignal(const QMetaMethod &, QObject *);
 
 void QDeviceInfoPrivate::connectNotify(const QMetaMethod &signal)
@@ -467,6 +576,13 @@ void QDeviceInfoPrivate::connectNotify(const QMetaMethod &signal)
     if (signal == thermalStateChangedSignal) {
         watchThermalState = true;
         currentThermalState = getThermalState();
+    }
+
+    static const QMetaMethod bluetoothStateChanged = QMetaMethod::fromSignal(&QDeviceInfoPrivate::bluetoothStateChanged);
+    if (signal == bluetoothStateChanged) {
+#if !defined(QT_NO_DBUS)
+        connectBtPowered();
+#endif
     }
 }
 
