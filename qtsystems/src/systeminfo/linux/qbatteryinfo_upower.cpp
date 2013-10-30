@@ -316,6 +316,7 @@ QBatteryInfo::ChargingState QBatteryInfoPrivate::getCurrentChargingState(int sta
     QBatteryInfo::ChargingState curChargeState = QBatteryInfo::UnknownChargingState;
     switch (state) {
     case 1: // charging
+    case 4: //fully charged
     {
         curChargeState = QBatteryInfo::Charging;
     }
@@ -323,9 +324,6 @@ QBatteryInfo::ChargingState QBatteryInfoPrivate::getCurrentChargingState(int sta
     case 2: //discharging
     case 3: //empty
         curChargeState = QBatteryInfo::Discharging;
-        break;
-    case 4: //fully charged
-        curChargeState = QBatteryInfo::NotCharging;
         break;
     case 5: //pending charge
     case 6: //pending discharge
