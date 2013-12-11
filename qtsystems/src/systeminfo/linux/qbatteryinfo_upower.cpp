@@ -152,13 +152,13 @@ QBatteryInfo::BatteryStatus QBatteryInfoPrivate::batteryStatus(int battery)
     QBatteryInfo::BatteryStatus stat = QBatteryInfo::BatteryStatusUnknown;
     if (batteryMap.count() >= battery) {
         int level = batteryMap.value(battery).value(QStringLiteral("Percentage")).toInt();
-        if (level < 2)
+        if (level < 3)
             stat = QBatteryInfo::BatteryEmpty;
-        else if (level > 1 && level < 11)
+        else if (level < 11)
             stat = QBatteryInfo::BatteryLow;
-        else if (level > 10 && level < 99)
+        else if (level < 100)
             stat = QBatteryInfo::BatteryOk;
-        else if (level == 100)
+        else
             stat = QBatteryInfo::BatteryFull;
     }
     return stat;
@@ -251,13 +251,13 @@ void QBatteryInfoPrivate::uPowerBatteryPropertyChanged(const QString &prop, cons
 
         QBatteryInfo::BatteryStatus stat = QBatteryInfo::BatteryStatusUnknown;
 
-        if (level < 2)
+        if (level < 3)
             stat = QBatteryInfo::BatteryEmpty;
-        else if (level > 1 && level < 11)
+        else if (level < 11)
             stat = QBatteryInfo::BatteryLow;
-        else if (level > 10 && level < 99)
+        else if (level < 100)
             stat = QBatteryInfo::BatteryOk;
-        else if (level == 100)
+        else
             stat = QBatteryInfo::BatteryFull;
 
         //   if (batteryMap.value(foundBattery).value(QStringLiteral("Percentage")).toInt() != stat) {
