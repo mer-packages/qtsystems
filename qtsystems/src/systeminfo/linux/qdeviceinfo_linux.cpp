@@ -46,7 +46,7 @@
 #endif // QT_NO_OFONO
 
 #include "qscreensaver_linux_p.h"
-#include <QNetworkInfo>
+#include "qnetworkinfo.h"
 
 #include <QtCore/qdir.h>
 #include <QtCore/qmetaobject.h>
