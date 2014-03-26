@@ -20,6 +20,7 @@ BuildRequires:  qt5-qmake
 BuildRequires:  fdupes
 BuildRequires:  pkgconfig(libudev)
 BuildRequires:  pkgconfig(bluez)
+BuildRequires:  ssu-devel
 
 %description
 Qt is a cross-platform application and UI framework. Using Qt, you can
@@ -146,7 +147,7 @@ This package contains the PublishSuvbscribe import for QtDeclarative
 %build
 export QTDIR=/usr/share/qt5
 touch .git
-qmake -qt=5 CONFIG+=ofono CONFIG+=nox11option CONFIG+=upower
+qmake -qt=5 CONFIG+=ofono CONFIG+=nox11option CONFIG+=upower CONFIG+=ssu
 make %{?_smp_mflags}
 
 %install
