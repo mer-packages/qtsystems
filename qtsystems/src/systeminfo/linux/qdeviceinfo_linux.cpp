@@ -54,6 +54,7 @@
 #include <QtCore/qdir.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qprocess.h>
+#include <QtCore/qregularexpression.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qtimer.h>
 #include <QtCore/qstandardpaths.h>
@@ -429,6 +430,11 @@ QString QDeviceInfoPrivate::version(QDeviceInfo::Version type)
     case QDeviceInfo::Os:
 
         if (versionBuffer[0].isEmpty()) {
+            versionBuffer[0] = findInRelease(QStringLiteral("VERSION_ID"),
+                                             QStringLiteral("os-release"));
+        }
+
+        if (versionBuffer[0].isEmpty()) {
             versionBuffer[0] = findInRelease(QStringLiteral("VERSION_ID"));
         }
 
@@ -445,6 +451,12 @@ QString QDeviceInfoPrivate::version(QDeviceInfo::Version type)
         return versionBuffer[0];
 
     case QDeviceInfo::Firmware:
+        // Try to read hardware adaptation version first.
+        if (versionBuffer[1].isEmpty()) {
+            versionBuffer[1] = findInRelease(QStringLiteral("VERSION_ID"),
+                                             QStringLiteral("hw-release"));
+        }
+
         if (versionBuffer[1].isEmpty()) {
             QFile file(QStringLiteral("/proc/sys/kernel/osrelease"));
             if (file.open(QIODevice::ReadOnly)) {
@@ -484,11 +496,17 @@ QString QDeviceInfoPrivate::boardName()
     return boardNameString;
 }
 
-QString QDeviceInfoPrivate::findInRelease(const QString &searchTerm)
+QString QDeviceInfoPrivate::findInRelease(const QString &searchTerm, const QString &file)
 {
     QString result;
-    QStringList releaseFies = QDir(QStringLiteral("/etc/")).entryList(QStringList() << QStringLiteral("*-release"));
-    foreach (const QString &file, releaseFies) {
+    QStringList releaseFiles;
+    if (file.isEmpty()) {
+        releaseFiles = QDir(QStringLiteral("/etc/")).entryList(QStringList() << QStringLiteral("*-release"));
+    } else {
+        releaseFiles.append(file);
+    }
+
+    foreach (const QString &file, releaseFiles) {
         if (!result.isEmpty())
             continue;
         QFile release(QStringLiteral("/etc/") + file);
@@ -499,6 +517,8 @@ QString QDeviceInfoPrivate::findInRelease(const QString &searchTerm)
                 line = stream.readLine();
                 if (line.left(searchTerm.size()) == searchTerm) {
                   result = line.split(QStringLiteral("=")).at(1).simplified();
+                  // Remove optional quotation marks.
+                  result.remove(QRegularExpression(QStringLiteral("^\"|\"$")));
                   break;
                 }
             } while (!line.isNull());
