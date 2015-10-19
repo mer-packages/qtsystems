@@ -1,3 +1,0 @@
-[submodule "upstream"]
-	path = upstream
-	url = git://qt.gitorious.org/qt/qtsystems.git
